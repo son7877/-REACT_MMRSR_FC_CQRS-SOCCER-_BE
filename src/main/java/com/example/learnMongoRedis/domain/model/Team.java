@@ -15,10 +15,12 @@ public class Team {
     private String director;
     private String owner;
     private String homeStadium;
-    private List<Player> players;
+    private List<PlayerInTeam> players;
     private Awards awards;
+    private List<SeasonInTeam> seasons;
     private List<String> rivalTeam;
     private int views;
+    private int leaguePoint;
 }
 
 

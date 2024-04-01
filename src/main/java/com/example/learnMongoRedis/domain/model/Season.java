@@ -4,15 +4,15 @@ import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 
-@Document(collection = "users")
-@Data
-public class User {
+import java.util.List;
 
+@Document(collection = "seasons")
+@Data
+public class Season {
     @Id
     private String id;
-    private String loginId;
-    private String password;
-    private String name;
-    private String email;
-    private String age;
+    private int season;
+    private int roundCount;
+    private List<Round> roundList;
+
 }

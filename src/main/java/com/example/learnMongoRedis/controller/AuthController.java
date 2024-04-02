@@ -4,6 +4,7 @@ import com.example.learnMongoRedis.domain.TokenService;
 import com.example.learnMongoRedis.domain.UserService;
 import com.example.learnMongoRedis.service.AuthUserFacadeImpl;
 import com.example.learnMongoRedis.global.wrapper.BaseResponseEntity;
+import com.example.learnMongoRedis.service.SimulationMatch;
 import com.example.learnMongoRedis.service.dto.TokenRefreshDto;
 import com.example.learnMongoRedis.service.dto.TokenResponseDto;
 import com.example.learnMongoRedis.service.dto.UserSignInDto;
@@ -18,9 +19,9 @@ import org.springframework.web.bind.annotation.*;
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 public class AuthController {
-    private final UserService userService;
     private final AuthUserFacadeImpl authUserFacade;
     private final TokenService tokenService;
+    private final SimulationMatch simulationMatch;
 
     @PostMapping("/sign-in")
     public ResponseEntity<BaseResponseEntity<TokenResponseDto>> signIn(@Validated @RequestBody UserSignInDto userSignUpDto) {
@@ -33,4 +34,10 @@ public class AuthController {
             TokenResponseDto result = authUserFacade.tokenRefresh(tokenRefreshDto.getRefreshToken());
             return BaseResponseEntity.ok(result, "success");
     }
+
+    @PostMapping("/test")
+    public void tokenRefresh() {
+        simulationMatch.runSimulation();
+    }
+
 }

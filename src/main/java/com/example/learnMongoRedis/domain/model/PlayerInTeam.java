@@ -11,5 +11,5 @@ public class PlayerInTeam {
     private int number;
     private int age;
     private boolean assertion;
-    private boolean overall;
+    private int overall;
 }

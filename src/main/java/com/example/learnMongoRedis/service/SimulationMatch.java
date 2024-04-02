@@ -31,6 +31,11 @@ public class SimulationMatch {
         this.playerRepository = playerRepository;
     }
 
+    @Autowired
+    public void matchTeams(){
+
+    }
+
     @Scheduled(fixedRate = 300000)
     public void runMatch() {
         Map<Object, Object> viewCounts = stringRedisTemplate.opsForHash().entries("team_views");

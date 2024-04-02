@@ -10,7 +10,9 @@ public class SeasonInTeam {
     private int lose = 5;
     private int totalGoal = 55;
     private int totalConceded = 30;
-    private int point = 56;
+    public int point() {
+        return wins*3+draws;
+    }
     public int getDiff() {
         return totalGoal - totalConceded;
     }

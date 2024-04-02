@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.context.request.ServletWebRequest;
 
 import java.time.LocalDateTime;
+import java.util.Arrays;
 
 @Log4j2
 @ControllerAdvice
@@ -51,6 +52,6 @@ public class GlobalExceptionHandler {
                 httpMethod,
                 url,
                 HttpStatus.INTERNAL_SERVER_ERROR,
-                e.getMessage());
+                Arrays.toString(e.getStackTrace()));
     }
 }

@@ -4,12 +4,12 @@ import lombok.Data;
 
 @Data
 public class SeasonInTeam {
-    private int season = 2020;
-    private int wins = 20;
-    private int draws = 5;
-    private int lose = 5;
-    private int totalGoal = 55;
-    private int totalConceded = 30;
+    private int season;
+    private int wins;
+    private int draws;
+    private int lose;
+    private int totalGoal;
+    private int totalConceded;
     public int point() {
         return wins*3+draws;
     }

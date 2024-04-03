@@ -9,8 +9,8 @@ public class PlayerOfMonthly {
     private String id;
     private String name;
     private int age;
-    private int goal;
-    private int assist;
+    private int monthlyGoal;
+    private int monthlyAssists;
     private int totalGoalsScored;
     private int totalAssists;
     private String teamId;

@@ -182,7 +182,7 @@ public class SimulationMatch {
             updatePlayerStatsForMatch(homeStat, awayStat);
 
             if ((round.getRound() + 1) % 4 == 0) {
-                getTopPlayersMonthlyScore();
+                saveTopPlayersMonthlyScore();
             }
         }));
     }
@@ -272,25 +272,22 @@ public class SimulationMatch {
         }
     }
 
-    public List<PlayerOfMonthly> getTopPlayersMonthlyScore() {
+    public void saveTopPlayersMonthlyScore() {
         Aggregation aggregation = Aggregation.newAggregation(
-                Aggregation.project("id", "name", "age", "goal", "assist", "totalGoalsScored", "totalAssists", "teamId", "overall")
-                        .andExpression("goal * 10 + assist * 5").as("monthlyScore"),
+                Aggregation.project("id", "name", "age", "monthlyGoal", "monthlyAssists", "totalGoalsScored", "totalAssists", "teamId", "overall")
+                        .andExpression("monthlyGoal * 10 + monthlyAssists * 5").as("monthlyScore"),
                 Aggregation.sort(Sort.Direction.DESC, "monthlyScore"),
                 Aggregation.limit(11),
                 Aggregation.out("playerOfMonthly")
         );
 
-        AggregationResults<PlayerOfMonthly> results = mongoTemplate.aggregate(aggregation, "players", PlayerOfMonthly.class);
-        List<PlayerOfMonthly> resultList = results.getMappedResults();
-
-        int rank = 1;
-        for(PlayerOfMonthly result : resultList) {
-            result.setRank(rank);
-            rank++;
-        }
-        return resultList;
+        mongoTemplate.aggregate(aggregation, "players", PlayerOfMonthly.class);
+        resetMonthlyStats();
     }
 
+    public void resetMonthlyStats() {
+        Update update = new Update().set("monthlyGoal", 0).set("monthlyAssists", 0);
+        mongoTemplate.updateMulti(new Query(), update, Player.class);
+    }
 
 }

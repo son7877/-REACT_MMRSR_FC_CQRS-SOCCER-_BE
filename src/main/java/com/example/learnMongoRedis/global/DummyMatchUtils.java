@@ -25,9 +25,9 @@ public class DummyMatchUtils {
         for (int i = 0; i < goalsCount; i++) {
             goals.add(new Goal(
                     45,
-                    "Player " + i,
+                    "66092b7629b17017ca43ddac",
                     "손흥민",
-                    "Player",
+                    "66092b7629b17017ca43ddad",
                     "케인"
             ));
         }

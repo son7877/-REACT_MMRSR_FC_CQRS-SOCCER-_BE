@@ -1,14 +1,13 @@
 package com.example.learnMongoRedis.service;
 
 import com.example.learnMongoRedis.domain.StateModel.MatchResultState;
+import com.example.learnMongoRedis.domain.model.PlayerOfMonthly;
 import com.example.learnMongoRedis.domain.StateModel.SimulationData;
 import com.example.learnMongoRedis.domain.StateModel.UpdateMatchOutcome;
+import com.example.learnMongoRedis.domain.model.Player;
 import com.example.learnMongoRedis.domain.model.SeasonInTeam;
 import com.example.learnMongoRedis.domain.model.Team;
-import com.example.learnMongoRedis.domain.model.match.Match;
-import com.example.learnMongoRedis.domain.model.match.Round;
-import com.example.learnMongoRedis.domain.model.match.Season;
-import com.example.learnMongoRedis.domain.model.match.TeamStat;
+import com.example.learnMongoRedis.domain.model.match.*;
 import com.example.learnMongoRedis.global.DummyMatchUtils;
 import com.example.learnMongoRedis.global.error_handler.AppError;
 import com.example.learnMongoRedis.repository.PlayerRepository;
@@ -16,7 +15,10 @@ import com.example.learnMongoRedis.repository.SeasonRepository;
 import com.example.learnMongoRedis.repository.TeamRepository;
 import lombok.extern.log4j.Log4j2;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.aggregation.Aggregation;
+import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
@@ -27,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Stream;
 
 @Service
 @Log4j2
@@ -100,9 +103,8 @@ public class SimulationMatch {
         saveSimulationResults(season, round, teams);
     }
 
-     @Transactional
+    @Transactional
     public void saveSimulationResults(Season season, Round round, List<Team> teams) {
-//        log.error(round.toString());
         addRoundInSeason(season.getId(), round);
         updateSeasonInTeam(teams, round, season.getSeason());
     }
@@ -149,7 +151,6 @@ public class SimulationMatch {
                 .build();
     }
 
-
     private void updateSeasonInTeam(List<Team> teamList, Round round, int season) {
         round.getMatches().forEach((match -> {
             TeamStat homeStat = match.homeTeam;
@@ -162,19 +163,27 @@ public class SimulationMatch {
                 if (awayStat.teamId.equals(team.getId())) awayTeam = team;
             }
 
-            if(homeTeam == null || awayTeam == null) throw new AppError.Unexpected.NullPointerException("팀을 찾을 수 없습니다.");
+            if (homeTeam == null || awayTeam == null)
+                throw new AppError.Unexpected.NullPointerException("팀을 찾을 수 없습니다.");
 
             List<SeasonInTeam> homeSeasons = homeTeam.getSeasons();
             List<SeasonInTeam> awaySeasons = awayTeam.getSeasons();
-            if(homeSeasons.isEmpty() || homeSeasons.get(homeSeasons.size() - 1).getSeason() != season) {
+
+            if (homeSeasons.isEmpty() || homeSeasons.get(homeSeasons.size() - 1).getSeason() != season) {
                 homeSeasons.add(createSeasonInTeam(homeTeam.getId(), season));
             }
-            if(awaySeasons.isEmpty() || awaySeasons.get(homeSeasons.size() - 1).getSeason() != season) {
+            if (awaySeasons.isEmpty() || awaySeasons.get(awaySeasons.size() - 1).getSeason() != season) {
                 awaySeasons.add(createSeasonInTeam(awayTeam.getId(), season));
             }
 
-            updateMatchResultOutcome(homeTeam, homeSeasons.size() -1, makeUpdateMatchOutcome(homeStat, awayStat, true));
-            updateMatchResultOutcome(awayTeam, awaySeasons.size() -1, makeUpdateMatchOutcome(homeStat, awayStat, false));
+
+            updateMatchResultOutcome(homeTeam, homeSeasons.size() - 1, makeUpdateMatchOutcome(homeStat, awayStat, true));
+            updateMatchResultOutcome(awayTeam, awaySeasons.size() - 1, makeUpdateMatchOutcome(homeStat, awayStat, false));
+            updatePlayerStatsForMatch(homeStat, awayStat);
+
+            if ((round.getRound() + 1) % 4 == 0) {
+                getTopPlayersMonthlyScore();
+            }
         }));
     }
 
@@ -189,8 +198,9 @@ public class SimulationMatch {
                 .totalConceded(0)
                 .build();
         addSeasonToTeam(teamId, seasonInTeam);
-        return  seasonInTeam;
+        return seasonInTeam;
     }
+
     public void addSeasonToTeam(String teamId, SeasonInTeam newSeason) {
         Query query = new Query(Criteria.where("id").is(teamId));
         Update update = new Update().push("seasons", newSeason);
@@ -201,7 +211,7 @@ public class SimulationMatch {
 
         int homeGoals = home.goals.size();
         int awayGoals = away.goals.size();
-        if(isHome) {
+        if (isHome) {
             return new UpdateMatchOutcome(homeGoals, awayGoals, MatchResultState.convertMatchResultState(homeGoals, awayGoals));
         } else {
             return new UpdateMatchOutcome(awayGoals, homeGoals, MatchResultState.convertMatchResultState(awayGoals, homeGoals));
@@ -230,8 +240,57 @@ public class SimulationMatch {
         update.inc(fieldToUpdate, 1);
         mongoTemplate.updateFirst(query, update, Team.class);
     }
-    private void updatePlayerStatToMongo(Team team, SeasonInTeam season, TeamStat teamStat) {
 
+    // 추가해야할 로직 이달의 선수 이달의 팀 선수 업데이트
+    private void updatePlayerStatsForMatch(TeamStat home, TeamStat away) {
+        List<Goal> goals = Stream.concat(home.getGoals().stream(), away.getGoals().stream()).toList();
+        log.error("#@#@$@#$#@$@#$@#$@#$@#$@#$@#$");
+        log.error(goals.size());
+        log.error(goals.toString());
+        goals.forEach(this::updatePlayerStatsForGoal);
     }
+
+    private void updatePlayerStatsForGoal(Goal goal) {
+        if (goal.getGoalPlayerId() != null && !goal.getGoalPlayerId().isEmpty()) {
+            // 득점자의 통계 업데이트
+            Query queryGoalPlayer = new Query(Criteria.where("id").is(goal.getGoalPlayerId()));
+            Update updateGoalPlayer = new Update()
+                    .inc("totalGoalsScored", 1)
+                    .inc("monthlyGoal", 1)
+                    .inc("goal", 1);
+            mongoTemplate.updateFirst(queryGoalPlayer, updateGoalPlayer, Player.class);
+        }
+
+        if (goal.getAssistPlayerId() != null && !goal.getAssistPlayerId().isEmpty()) {
+            // 어시스트 제공자의 통계 업데이트
+            Query queryAssistPlayer = new Query(Criteria.where("id").is(goal.getAssistPlayerId()));
+            Update updateAssistPlayer = new Update()
+                    .inc("totalAssists", 1)
+                    .inc("monthlyAssists", 1)
+                    .inc("assist", 1);
+            mongoTemplate.updateFirst(queryAssistPlayer, updateAssistPlayer, Player.class);
+        }
+    }
+
+    public List<PlayerOfMonthly> getTopPlayersMonthlyScore() {
+        Aggregation aggregation = Aggregation.newAggregation(
+                Aggregation.project("id", "name", "age", "goal", "assist", "totalGoalsScored", "totalAssists", "teamId", "overall")
+                        .andExpression("goal * 10 + assist * 5").as("monthlyScore"),
+                Aggregation.sort(Sort.Direction.DESC, "monthlyScore"),
+                Aggregation.limit(11),
+                Aggregation.out("playerOfMonthly")
+        );
+
+        AggregationResults<PlayerOfMonthly> results = mongoTemplate.aggregate(aggregation, "players", PlayerOfMonthly.class);
+        List<PlayerOfMonthly> resultList = results.getMappedResults();
+
+        int rank = 1;
+        for(PlayerOfMonthly result : resultList) {
+            result.setRank(rank);
+            rank++;
+        }
+        return resultList;
+    }
+
 
 }

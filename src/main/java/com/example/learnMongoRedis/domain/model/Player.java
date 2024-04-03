@@ -22,8 +22,8 @@ public class Player {
     private int totalGoalsScored;
     private int totalAssists;
     private String teamId;
-    private int weeklyGoals;
-    private int weeklyAssists;
+    private int monthlyGoal;
+    private int monthlyAssists;
     private int overall;
 }
 

@@ -21,6 +21,7 @@ public class Team {
     private List<String> rivalTeam;
     private int views;
     private int leaguePoint;
+    private int teamOverall;
 }
 
 

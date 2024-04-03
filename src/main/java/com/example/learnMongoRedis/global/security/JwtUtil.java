@@ -70,7 +70,7 @@ public class JwtUtil {
                 .compact();
     }
 
-    public AccessPayload validateAccessToken(String token) throws Exception {
+    public AccessPayload validateAccessToken(String token) throws Exception{
         try {
             Claims claims = Jwts.parserBuilder()
                     .setSigningKey(secretKeyHash())
@@ -79,9 +79,8 @@ public class JwtUtil {
                     .getBody();
 
             if (claims.get("tokenType", Integer.class) != TokenType.ACCESS_TOKEN.getValue()) {
-                throw new AppError.Expected.ValidationFailedException("토큰 타입이 잘못되었습니다.");
+                throw new AppError.Unexpected.IllegalArgumentException("토큰 타입이 잘못되었습니다.");
             }
-
             return new AccessPayload(claims.get("userId", String.class));
         } catch (ExpiredJwtException e) {
             throw new AppError.Expected.ValidationFailedException("토큰이 만료되었습니다.");

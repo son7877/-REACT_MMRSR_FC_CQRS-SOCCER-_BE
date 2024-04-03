@@ -2,11 +2,14 @@ package com.example.learnMongoRedis.controller;
 
 import com.example.learnMongoRedis.domain.TokenService;
 import com.example.learnMongoRedis.domain.UserService;
+import com.example.learnMongoRedis.global.security.JwtUtil;
+import com.example.learnMongoRedis.global.security.model.AccessPayload;
 import com.example.learnMongoRedis.service.AuthUserFacadeImpl;
 import com.example.learnMongoRedis.global.wrapper.BaseResponseEntity;
 import com.example.learnMongoRedis.service.SimulationMatch;
 import com.example.learnMongoRedis.service.dto.TokenRefreshDto;
 import com.example.learnMongoRedis.service.dto.TokenResponseDto;
+import com.example.learnMongoRedis.service.dto.TokenValidationDto;
 import com.example.learnMongoRedis.service.dto.UserSignInDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.log4j.Log4j2;
@@ -35,6 +38,14 @@ public class AuthController {
             return BaseResponseEntity.ok(result, "success");
     }
 
+    @PostMapping("/validToken")
+    public ResponseEntity<BaseResponseEntity<TokenResponseDto>> validationAccessToken(@RequestBody TokenValidationDto tokenValidationDto) {
+        TokenResponseDto result = authUserFacade.validationAccessToken(
+                tokenValidationDto.getAccessToken(),
+                tokenValidationDto.getRefreshToken()
+        );
+        return BaseResponseEntity.ok(result, "success");
+    }
     @PostMapping("/test")
     public void tokenRefresh() {
         simulationMatch.runSimulation();

@@ -17,6 +17,7 @@ public class Team {
     private String homeStadium;
     private List<PlayerInTeam> players;
     private Awards awards;
+    private List<SeasonInTeam> seasons;
     private List<String> rivalTeam;
     private int views;
     private int leaguePoint;

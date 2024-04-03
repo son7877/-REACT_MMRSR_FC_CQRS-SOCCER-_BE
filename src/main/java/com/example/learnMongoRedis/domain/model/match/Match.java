@@ -11,8 +11,6 @@ import java.time.LocalDateTime;
 @Data
 @AllArgsConstructor
 public class Match {
-    @Id
-    private String id;
     public String date;
     public String stadium;
     public TeamStat homeTeam;

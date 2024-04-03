@@ -1,10 +1,15 @@
 package com.example.learnMongoRedis.service;
 
-import com.example.learnMongoRedis.domain.model.match.Round;
-import com.example.learnMongoRedis.domain.model.match.Season;
+import com.example.learnMongoRedis.domain.StateModel.MatchResultState;
+import com.example.learnMongoRedis.domain.StateModel.SimulationData;
+import com.example.learnMongoRedis.domain.StateModel.UpdateMatchOutcome;
+import com.example.learnMongoRedis.domain.model.SeasonInTeam;
 import com.example.learnMongoRedis.domain.model.Team;
 import com.example.learnMongoRedis.domain.model.match.Match;
+import com.example.learnMongoRedis.domain.model.match.Round;
+import com.example.learnMongoRedis.domain.model.match.Season;
 import com.example.learnMongoRedis.domain.model.match.TeamStat;
+import com.example.learnMongoRedis.global.DummyMatchUtils;
 import com.example.learnMongoRedis.global.error_handler.AppError;
 import com.example.learnMongoRedis.repository.PlayerRepository;
 import com.example.learnMongoRedis.repository.SeasonRepository;
@@ -16,15 +21,12 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 @Service
 @Log4j2
@@ -46,70 +48,20 @@ public class SimulationMatch {
         this.mongoTemplate = mongoTemplate;
     }
 
-    private Season getCurrentSeason() {
-
-        Optional<Season> getSeason = seasonRepository.findTopByOrderByIdDesc();
-        Season currentSeason = null;
-        if(getSeason.isPresent()) {
-            currentSeason = getSeason.get();
-        } else {
-            currentSeason = createSeason(2024);
-        }
-        log.error("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&");
-        log.error(currentSeason.toString());
-        log.error("&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&");
-
-        if (currentSeason.getRoundCount() >= 29) {
-            log.error("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
-            return createSeason(currentSeason.getSeason() + 1);
-        } else {
-            return currentSeason;
-        }
+    @Transactional(readOnly = true)
+    public SimulationData fetchSimulationData() {
+        List<Team> teams = teamRepository.findAll();
+        Season season = getCurrentSeason();
+        return new SimulationData(teams, season);
     }
 
-    // 만약 시즌이 없거나 시즌의 라운드가 30인경우 새로 생성
-    @Transactional
-    private Season createSeason(int seasonNumber) {
-        Season season = Season.builder()
-                .season(seasonNumber)
-                .roundList(List.of())
-                .roundCount(0)
-                .build();
-
-        seasonRepository.save(season);
-        return season;
-    }
-
-    private Match createMatch(TeamStat home, TeamStat away, String stadium) {
-        return new Match(
-                null,
-                LocalDateTime.now().toString(),
-                stadium,
-                home,
-                away
-        );
-    }
-
-    private Round createRound(int round, List<Match> matches) {
-        return Round.builder()
-                .round(round)
-                .matches(matches)
-                .build();
-    }
-
-    private void addRoundInSeason(String seasonId, Round round) {
-        Query query = new Query(Criteria.where("id").is(seasonId));
-        Update update = new Update().inc("roundCount", 1).push("roundList", round);
-        mongoTemplate.findAndModify(query, update, Season.class);
-    }
 
     public void runSimulation() {
-        List<Team> teams = teamRepository.findAll();
+        SimulationData simulationData = fetchSimulationData();
         List<Match> matches = new ArrayList<>();
-        Season season = getCurrentSeason();
-        log.error("********************************************");
-        log.error(season.toString());
-        log.error("********************************************");
+        List<Team> teams = simulationData.getTeams();
+        Season season = simulationData.getSeason();
+
         int totalTeams = teams.size();  // 총 팀수
         int matchesPerRound = totalTeams / 2; // 라운드 당 경기 수
         int roundCount = season.getRoundCount();
@@ -133,8 +85,9 @@ public class SimulationMatch {
 
             Team homeTeam = teams.get(homeTeamIndex);
             Team awayTeam = teams.get(awayTeamIndex);
-            TeamStat homeStat = DummyMatchUtils.generateTeamStat(homeTeam.getClubName());
-            TeamStat awayStat = DummyMatchUtils.generateTeamStat(awayTeam.getClubName());
+
+            TeamStat homeStat = DummyMatchUtils.generateTeamStat(homeTeam.getId(), homeTeam.getClubName());
+            TeamStat awayStat = DummyMatchUtils.generateTeamStat(awayTeam.getId(), awayTeam.getClubName());
 
             matches.add(createMatch(
                     homeStat,
@@ -144,24 +97,141 @@ public class SimulationMatch {
         }
 
         Round round = createRound(roundCount + 1, matches);
-        addRoundInSeason(season.getId(),round);
+        saveSimulationResults(season, round, teams);
     }
-//
-//    @Scheduled(fixedRate = 300000)
-//    public void runMatch() {
-//        Map<Object, Object> viewCounts = stringRedisTemplate.opsForHash().entries("team_views");
-//
-//        viewCounts.forEach((teamId, views) -> {
-//            if (teamId != null && views != null) {
-//                String teamIdStr = (String) teamId;
-//                int viewCount = Integer.parseInt((String) views);
-//
-//                Update update = new Update().inc("views", viewCount);
-//                Query query = new Query(Criteria.where("id").is(teamIdStr));
-//
-//                mongoTemplate.updateFirst(query, update, Team.class);
-//                stringRedisTemplate.opsForHash().delete("team_views", teamId);
-//            }
-//        });
-//    }
+
+     @Transactional
+    public void saveSimulationResults(Season season, Round round, List<Team> teams) {
+//        log.error(round.toString());
+        addRoundInSeason(season.getId(), round);
+        updateSeasonInTeam(teams, round, season.getSeason());
+    }
+
+    private void addRoundInSeason(String seasonId, Round round) {
+        Query query = new Query(Criteria.where("id").is(seasonId));
+        Update update = new Update().inc("roundCount", 1).push("roundList", round);
+        mongoTemplate.findAndModify(query, update, Season.class);
+    }
+
+    private Season getCurrentSeason() {
+        Season currentSeason = seasonRepository.findTopByOrderByIdDesc().orElseGet(() -> createSeason(2024));
+        if (currentSeason.getRoundCount() >= 29) {
+            return createSeason(currentSeason.getSeason() + 1);
+        } else {
+            return currentSeason;
+        }
+    }
+
+    private Season createSeason(int seasonNumber) {
+        Season season = Season.builder()
+                .season(seasonNumber)
+                .roundList(List.of())
+                .roundCount(0)
+                .build();
+
+        seasonRepository.save(season);
+        return season;
+    }
+
+    private Match createMatch(TeamStat home, TeamStat away, String stadium) {
+        return new Match(
+                LocalDateTime.now().toString(),
+                stadium,
+                home,
+                away
+        );
+    }
+
+    private Round createRound(int round, List<Match> matches) {
+        return Round.builder()
+                .round(round)
+                .matches(matches)
+                .build();
+    }
+
+
+    private void updateSeasonInTeam(List<Team> teamList, Round round, int season) {
+        round.getMatches().forEach((match -> {
+            TeamStat homeStat = match.homeTeam;
+            TeamStat awayStat = match.awayTeam;
+            Team homeTeam = null;
+            Team awayTeam = null;
+
+            for (Team team : teamList) {
+                if (homeStat.teamId.equals(team.getId())) homeTeam = team;
+                if (awayStat.teamId.equals(team.getId())) awayTeam = team;
+            }
+
+            if(homeTeam == null || awayTeam == null) throw new AppError.Unexpected.NullPointerException("팀을 찾을 수 없습니다.");
+
+            List<SeasonInTeam> homeSeasons = homeTeam.getSeasons();
+            List<SeasonInTeam> awaySeasons = awayTeam.getSeasons();
+            if(homeSeasons.isEmpty() || homeSeasons.get(homeSeasons.size() - 1).getSeason() != season) {
+                homeSeasons.add(createSeasonInTeam(homeTeam.getId(), season));
+            }
+            if(awaySeasons.isEmpty() || awaySeasons.get(homeSeasons.size() - 1).getSeason() != season) {
+                awaySeasons.add(createSeasonInTeam(awayTeam.getId(), season));
+            }
+
+            updateMatchResultOutcome(homeTeam, homeSeasons.size() -1, makeUpdateMatchOutcome(homeStat, awayStat, true));
+            updateMatchResultOutcome(awayTeam, awaySeasons.size() -1, makeUpdateMatchOutcome(homeStat, awayStat, false));
+        }));
+    }
+
+    private SeasonInTeam createSeasonInTeam(String teamId, int season) {
+        SeasonInTeam seasonInTeam = SeasonInTeam
+                .builder()
+                .season(season)
+                .wins(0)
+                .draws(0)
+                .lose(0)
+                .totalGoal(0)
+                .totalConceded(0)
+                .build();
+        addSeasonToTeam(teamId, seasonInTeam);
+        return  seasonInTeam;
+    }
+    public void addSeasonToTeam(String teamId, SeasonInTeam newSeason) {
+        Query query = new Query(Criteria.where("id").is(teamId));
+        Update update = new Update().push("seasons", newSeason);
+        mongoTemplate.updateFirst(query, update, Team.class);
+    }
+
+    public UpdateMatchOutcome makeUpdateMatchOutcome(TeamStat home, TeamStat away, boolean isHome) {
+
+        int homeGoals = home.goals.size();
+        int awayGoals = away.goals.size();
+        if(isHome) {
+            return new UpdateMatchOutcome(homeGoals, awayGoals, MatchResultState.convertMatchResultState(homeGoals, awayGoals));
+        } else {
+            return new UpdateMatchOutcome(awayGoals, homeGoals, MatchResultState.convertMatchResultState(awayGoals, homeGoals));
+        }
+    }
+
+    public void updateMatchResultOutcome(Team team, int seasonIdx, UpdateMatchOutcome updateMatchOutcome) {
+        Query query = new Query(Criteria.where("_id").is(team.getId()));
+        Update update = new Update();
+        String baseUpdatePath = "seasons." + seasonIdx + ".";
+        update.inc(baseUpdatePath + "totalGoal", updateMatchOutcome.getGoal());
+        update.inc(baseUpdatePath + "totalConceded", updateMatchOutcome.getConceded());
+
+        String fieldToUpdate = baseUpdatePath + "wins"; // Default to wins
+        switch (updateMatchOutcome.getMatchResultState()) {
+            case DRAW:
+                fieldToUpdate = baseUpdatePath + "draws";
+                break;
+            case LOSE:
+                fieldToUpdate = baseUpdatePath + "lose";
+                break;
+            default:
+                break;
+        }
+
+        update.inc(fieldToUpdate, 1);
+        mongoTemplate.updateFirst(query, update, Team.class);
+    }
+    private void updatePlayerStatToMongo(Team team, SeasonInTeam season, TeamStat teamStat) {
+
+    }
+
 }

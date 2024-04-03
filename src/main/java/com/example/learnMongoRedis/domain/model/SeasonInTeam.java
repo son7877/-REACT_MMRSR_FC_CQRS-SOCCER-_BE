@@ -1,8 +1,10 @@
 package com.example.learnMongoRedis.domain.model;
 
+import lombok.Builder;
 import lombok.Data;
 
 @Data
+@Builder
 public class SeasonInTeam {
     private int season;
     private int wins;

@@ -7,7 +7,8 @@ import lombok.Data;
 @AllArgsConstructor
 public class Goal{
     public int time;
-    public String playerId;
+    public String goalPlayerId;
     public String playerName;
+    public String assistPlayerId;
     public String assistName;
 }

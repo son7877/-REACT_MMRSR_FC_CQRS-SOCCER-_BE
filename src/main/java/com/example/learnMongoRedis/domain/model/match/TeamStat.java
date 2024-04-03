@@ -7,7 +7,7 @@ import java.util.ArrayList;
 @Data
 @AllArgsConstructor
 public class TeamStat{
-    public String id;
+    public String teamId;
     public String name;
     public ArrayList<Goal> goals;
     public int shots;

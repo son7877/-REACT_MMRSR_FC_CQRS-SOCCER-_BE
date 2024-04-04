@@ -42,7 +42,7 @@ public class SimulationMatch {
     private final PlayerRepository playerRepository;
     private final SeasonRepository seasonRepository;
     @Autowired
-    private MongoTemplate mongoTemplate;
+    private final MongoTemplate mongoTemplate;
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 
@@ -255,6 +255,7 @@ public class SimulationMatch {
                     homeTeam.getHomeStadium()
             ));
         }
+
         Round round = createRound(roundCount + 1, matches);
         saveSimulationResults(season, round, teams);
     }
@@ -290,73 +291,6 @@ public class SimulationMatch {
         }
         return divisionToPosition;
     }
-
-
-
-
-    //로직 확인용
-//    public void goalSimulation(){
-//        Random random = new Random();
-//        int shots = 0;
-//        int effectiveShots = 0;
-//        int goals = 0;
-//
-//        // 홈팀인지 어웨이팀인지 결정 필요
-//        double homeAdvantage = 0.9;
-//        double awayPenalty = 1.1;
-//
-//        //팀정보에서 선수들 오버롤들을 더해서 평균값내기(팀 오버롤)
-//        double overall = 50;
-//        double ratio = awayPenalty * (-0.002*overall+1.2);
-//
-//        for (int minute = 0; minute < 90; minute++) {
-//            if (random.nextDouble() * ratio< 0.20) { // 20% 확률로 슈팅
-//                shots++;
-//                if (random.nextDouble() * ratio < 0.30) { // 슈팅 중 30%은 유효슈팅
-//                    effectiveShots++;
-//                    if (random.nextDouble() * ratio < 0.40) { // 유효슈팅 중 40%은 골
-//                        goals++;
-//                        // 골을 넣은 선수의 포지션 결정
-//                        double scorer = random.nextDouble();
-//                        if (scorer < 0.55) { // 55% 확률로 공격수가 골
-//                            // 골 넣은 선수 및 어시스트 선수 선정하기
-//                            // 골은 해당 포지션의 선수들 중 하나, 어시스트는 골 넣은 선수 제외한 나머지
-//
-//                        } else if (scorer < 0.90) { // 추가 35% 확률로 미드필더가 골
-//                            // 골 넣은 선수 및 어시스트 선수 선정하기
-//                            // 골은 해당 포지션의 선수들 중 하나, 어시스트는 골 넣은 선수 제외한 나머지
-//
-//                        } else { // 나머지 확률로 수비수가 골
-//
-//                        }
-//                    }
-//                }
-//            }
-//        }
-//
-//        // 생성된 골, 슈팅 , 유효 슈팅 TeamStat에 넣기
-//
-//
-//
-//    }
-//
-//    @Scheduled(fixedRate = 300000)
-//    public void runMatch() {
-//        Map<Object, Object> viewCounts = stringRedisTemplate.opsForHash().entries("team_views");
-//
-//        viewCounts.forEach((teamId, views) -> {
-//            if (teamId != null && views != null) {
-//                String teamIdStr = (String) teamId;
-//                int viewCount = Integer.parseInt((String) views);
-//
-//                Update update = new Update().inc("views", viewCount);
-//                Query query = new Query(Criteria.where("id").is(teamIdStr));
-//
-//                mongoTemplate.updateFirst(query, update, Team.class);
-//                stringRedisTemplate.opsForHash().delete("team_views", teamId);
-//            }
-//        });
-//    }
 
     private void addRoundInSeason(String seasonId, Round round) {
         Query query = new Query(Criteria.where("id").is(seasonId));

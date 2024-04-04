@@ -6,12 +6,9 @@ import com.example.learnMongoRedis.domain.StateModel.SimulationData;
 import com.example.learnMongoRedis.domain.StateModel.UpdateMatchOutcome;
 import com.example.learnMongoRedis.domain.model.Player;
 import com.example.learnMongoRedis.domain.model.SeasonInTeam;
-import com.example.learnMongoRedis.domain.model.Player;
 import com.example.learnMongoRedis.domain.model.PlayerInTeam;
 import com.example.learnMongoRedis.domain.model.match.*;
 import com.example.learnMongoRedis.domain.model.Team;
-import com.example.learnMongoRedis.domain.model.match.*;
-import com.example.learnMongoRedis.global.DummyMatchUtils;
 import com.example.learnMongoRedis.global.error_handler.AppError;
 import com.example.learnMongoRedis.repository.PlayerRepository;
 import com.example.learnMongoRedis.repository.SeasonRepository;
@@ -26,12 +23,12 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.stream.Stream;
 
 @Service
@@ -62,6 +59,7 @@ public class SimulationMatch {
     }
 
 
+    @Scheduled(fixedRate = 10000)
     public void runSimulation() {
         SimulationData simulationData = fetchSimulationData();
         Random random = new Random();
@@ -73,11 +71,8 @@ public class SimulationMatch {
         int matchesPerRound = totalTeams / 2; // 라운드 당 경기 수
         int roundCount = season.getRoundCount();
 
-
-
         // 홈 팀, 어웨이 팀
-        double Advantage [] = {0.9,1.1};
-
+        double[] Advantage = {0.9,1.1};
         //팀 정보에서 선수들 오버롤 들을 더해서 평균값 내기(팀 오버롤)
 
         for (int match = 0; match < matchesPerRound; match++) {
@@ -250,7 +245,7 @@ public class SimulationMatch {
         }
 
         Round round = createRound(roundCount + 1, matches);
-        saveSimulationResults(season, round, teams);
+         saveSimulationResults(season, round, teams);
     }
 
     @Transactional

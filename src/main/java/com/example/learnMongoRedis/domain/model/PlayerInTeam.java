@@ -7,7 +7,7 @@ import org.springframework.data.mongodb.core.mapping.Document;
 public class PlayerInTeam {
     private String _id;
     private String name;
-    private String position;
+    private int position;
     private int number;
     private int age;
     private boolean assertion;

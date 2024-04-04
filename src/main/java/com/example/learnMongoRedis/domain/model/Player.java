@@ -10,7 +10,7 @@ public class Player {
     @Id
     private String id;
     private String name;
-    private String position;
+    private int position;
     private int salary; // Consider changing to an appropriate type
     private int number;
     private String mainFoot;

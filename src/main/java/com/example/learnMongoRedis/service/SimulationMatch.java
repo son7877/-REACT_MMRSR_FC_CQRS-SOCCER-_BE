@@ -108,11 +108,7 @@ public class SimulationMatch {
             Team awayTeam = teams.get(awayTeamIndex);
 
             List<PlayerInTeam> homeTeamPlayers = homeTeam.getPlayers();
-            log.error("192837491827349182734");
             Map<Integer,List<PlayerInTeam>> homePositionPlayers = chunkPlayersToPosition(homeTeamPlayers);
-            log.error("*************9898989*******************************");
-            log.error(homePositionPlayers.toString());
-            log.error("*********9898989***********************************");
 
             List<PlayerInTeam> awayTeamPlayers = awayTeam.getPlayers();
             Map<Integer,List<PlayerInTeam>> awayPositionPlayers = chunkPlayersToPosition(awayTeamPlayers);
@@ -144,9 +140,6 @@ public class SimulationMatch {
                                         List<PlayerInTeam> attackPlayers = homePositionPlayers.get(1);
                                         PlayerInTeam goalPlayer = attackPlayers.get(goalIndex);
                                         PlayerInTeam assistPlayer = attackPlayers.get(assistIndex);
-                                        log.error("********************************************");
-                                        log.error(attackPlayers.toString());
-                                        log.error("********************************************");
                                         homeGoals.add(new Goal(
                                                 minute,
                                                 goalPlayer.get_id(),
@@ -264,6 +257,12 @@ public class SimulationMatch {
     public void saveSimulationResults(Season season, Round round, List<Team> teams) {
         addRoundInSeason(season.getId(), round);
         updateSeasonInTeam(teams, round, season.getSeason());
+        if ((round.getRound()) % 4 == 0) {
+            saveTopPlayersMonthlyScore();
+        }
+        if ((round.getRound()) % 30 == 0) {
+            // 시즌 끝나면 해야될 로직작성
+        }
     }
 
     private Map<Integer,List<PlayerInTeam>> chunkPlayersToPosition(List<PlayerInTeam> players) {
@@ -364,9 +363,6 @@ public class SimulationMatch {
             updateMatchResultOutcome(awayTeam, awaySeasons.size() - 1, makeUpdateMatchOutcome(homeStat, awayStat, false));
             updatePlayerStatsForMatch(homeStat, awayStat);
 
-            if ((round.getRound() + 1) % 4 == 0) {
-                saveTopPlayersMonthlyScore();
-            }
         }));
     }
 
@@ -427,9 +423,6 @@ public class SimulationMatch {
     // 추가해야할 로직 이달의 선수 이달의 팀 선수 업데이트
     private void updatePlayerStatsForMatch(TeamStat home, TeamStat away) {
         List<Goal> goals = Stream.concat(home.getGoals().stream(), away.getGoals().stream()).toList();
-        log.error("#@#@$@#$#@$@#$@#$@#$@#$@#$@#$");
-        log.error(goals.size());
-        log.error(goals.toString());
         goals.forEach(this::updatePlayerStatsForGoal);
     }
 
@@ -464,7 +457,11 @@ public class SimulationMatch {
                 Aggregation.out("playerOfMonthly")
         );
 
-        mongoTemplate.aggregate(aggregation, "players", PlayerOfMonthly.class);
+        // "players" 컬렉션에서 집계를 실행합니다.
+        AggregationResults<PlayerOfMonthly> results = mongoTemplate.aggregate(aggregation, "players", PlayerOfMonthly.class);
+        List<PlayerOfMonthly> resultList = results.getMappedResults(); // 집계된 결과를 받습니다.
+
+
         resetMonthlyStats();
     }
 

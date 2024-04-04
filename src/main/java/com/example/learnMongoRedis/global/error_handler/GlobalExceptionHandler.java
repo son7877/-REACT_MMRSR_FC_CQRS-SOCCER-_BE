@@ -54,6 +54,6 @@ public class GlobalExceptionHandler {
                 httpMethod,
                 url,
                 HttpStatus.INTERNAL_SERVER_ERROR,
-                e.getMessage());
+                Arrays.toString(e.getStackTrace()));
     }
 }

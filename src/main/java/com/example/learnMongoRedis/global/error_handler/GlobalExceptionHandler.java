@@ -38,6 +38,7 @@ public class GlobalExceptionHandler {
     }
 
     private String toLogEntry(Exception e, ServletWebRequest request) {
+        e.printStackTrace();
         String url = request.getDescription(false);
         String httpMethod = request.getHttpMethod().toString();
         return String.format("""
@@ -53,6 +54,6 @@ public class GlobalExceptionHandler {
                 httpMethod,
                 url,
                 HttpStatus.INTERNAL_SERVER_ERROR,
-                Arrays.toString(e.getStackTrace()));
+                e.getMessage());
     }
 }

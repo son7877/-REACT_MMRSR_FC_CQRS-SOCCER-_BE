@@ -42,7 +42,7 @@ public class SimulationMatch {
     private final PlayerRepository playerRepository;
     private final SeasonRepository seasonRepository;
     @Autowired
-    private MongoTemplate mongoTemplate;
+    private final MongoTemplate mongoTemplate;
     @Autowired
     private StringRedisTemplate stringRedisTemplate;
 

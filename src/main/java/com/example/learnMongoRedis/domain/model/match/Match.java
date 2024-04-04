@@ -15,7 +15,6 @@ public class Match {
     public String stadium;
     public TeamStat homeTeam;
     public TeamStat awayTeam;
-
 }
 
 

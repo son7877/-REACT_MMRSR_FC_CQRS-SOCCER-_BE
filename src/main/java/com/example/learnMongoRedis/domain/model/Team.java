@@ -22,6 +22,11 @@ public class Team {
     private int views;
     private int leaguePoint;
     private int teamOverall;
+
+    public double teamOverallAvg(){
+        return teamOverall / 11;
+    }
+
 }
 
 

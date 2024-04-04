@@ -24,6 +24,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<BaseResponseEntity<?>> handleAllUnexpectedExceptions(Exception ex, ServletWebRequest request) {
+        ex.printStackTrace();
         log.error(toLogEntry(ex, request));
         return BaseResponseEntity.fail(HttpStatus.INTERNAL_SERVER_ERROR, ex.getMessage());
     }

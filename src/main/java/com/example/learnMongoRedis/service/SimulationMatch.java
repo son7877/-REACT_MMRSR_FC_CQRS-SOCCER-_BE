@@ -59,7 +59,7 @@ public class SimulationMatch {
     }
 
 
-    @Scheduled(fixedRate = 10000)
+    @Scheduled(fixedRate = 5000)
     public void runSimulation() {
         SimulationData simulationData = fetchSimulationData();
         Random random = new Random();
@@ -251,13 +251,9 @@ public class SimulationMatch {
     @Transactional
     public void saveSimulationResults(Season season, Round round, List<Team> teams) {
         addRoundInSeason(season.getId(), round);
-        updateSeasonInTeam(teams, round, season.getSeason());
-        if ((round.getRound()) % 4 == 0) {
-            saveTopPlayersMonthlyScore();
-        }
-        if ((round.getRound()) % 30 == 0) {
-            // 시즌 끝나면 해야될 로직작성
-        }
+        updateSeasonInTeam(teams, round, season.getSeason());;
+        if ((round.getRound()) % 4 == 0) saveTopPlayersMonthlyScore();
+        if ((round.getRound()) % 30 == 0) resetSeasonsStats();
     }
 
     private Map<Integer,List<PlayerInTeam>> chunkPlayersToPosition(List<PlayerInTeam> players) {
@@ -462,6 +458,11 @@ public class SimulationMatch {
 
     public void resetMonthlyStats() {
         Update update = new Update().set("monthlyGoal", 0).set("monthlyAssists", 0);
+        mongoTemplate.updateMulti(new Query(), update, Player.class);
+    }
+
+    public void resetSeasonsStats() {
+        Update update = new Update().set("goal", 0).set("assist", 0);
         mongoTemplate.updateMulti(new Query(), update, Player.class);
     }
 

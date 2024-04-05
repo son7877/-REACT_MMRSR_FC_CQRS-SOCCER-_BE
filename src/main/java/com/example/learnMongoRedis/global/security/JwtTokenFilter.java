@@ -33,7 +33,6 @@ public class JwtTokenFilter extends OncePerRequestFilter {
     private static final String[] PERMIT_URL_ARRAY = {
             "/api/v1/auth/sign-in",
             "/api/v1/auth/refresh",
-            "/api/v1/auth/test",
             "/error"
     };
 

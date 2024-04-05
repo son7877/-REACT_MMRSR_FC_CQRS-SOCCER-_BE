@@ -3,6 +3,7 @@ package com.example.learnMongoRedis.controller;
 import com.example.learnMongoRedis.domain.PlayerService;
 import com.example.learnMongoRedis.domain.TeamService;
 import com.example.learnMongoRedis.domain.model.Player;
+import com.example.learnMongoRedis.domain.model.PlayerOfMonthly;
 import com.example.learnMongoRedis.domain.model.Team;
 import com.example.learnMongoRedis.global.wrapper.BaseResponseEntity;
 import lombok.RequiredArgsConstructor;
@@ -24,4 +25,10 @@ public class PlayerController {
     public ResponseEntity<BaseResponseEntity<List<Player>>> getAllPlayer() {
         return BaseResponseEntity.ok(playerService.getAllPlayer(), "success");
     }
+
+    @GetMapping("/monthly")
+    public ResponseEntity<BaseResponseEntity<List<PlayerOfMonthly>>> getBestPlayerOfMonth() {
+        return BaseResponseEntity.ok(playerService.getBestPlayerOfMonth(), "success");
+    }
+
 }

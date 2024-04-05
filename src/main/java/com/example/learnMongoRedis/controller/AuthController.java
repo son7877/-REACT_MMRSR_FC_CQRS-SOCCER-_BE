@@ -46,9 +46,4 @@ public class AuthController {
         );
         return BaseResponseEntity.ok(result, "success");
     }
-    @PostMapping("/test")
-    public void tokenRefresh() {
-        simulationMatch.runSimulation();
-    }
-
 }

@@ -59,7 +59,7 @@ public class SimulationMatch {
     }
 
 
-    @Scheduled(fixedRate = 5000)
+    @Scheduled(fixedRate = 50000)
     public void runSimulation() {
         SimulationData simulationData = fetchSimulationData();
         Random random = new Random();
@@ -452,7 +452,6 @@ public class SimulationMatch {
         AggregationResults<PlayerOfMonthly> results = mongoTemplate.aggregate(aggregation, "players", PlayerOfMonthly.class);
         List<PlayerOfMonthly> resultList = results.getMappedResults(); // 집계된 결과를 받습니다.
 
-
         resetMonthlyStats();
     }
 
@@ -465,5 +464,4 @@ public class SimulationMatch {
         Update update = new Update().set("goal", 0).set("assist", 0);
         mongoTemplate.updateMulti(new Query(), update, Player.class);
     }
-
 }

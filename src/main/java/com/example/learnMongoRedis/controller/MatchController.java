@@ -1,6 +1,7 @@
 package com.example.learnMongoRedis.controller;
 
 import com.example.learnMongoRedis.domain.SeasonService;
+import com.example.learnMongoRedis.domain.model.match.Match;
 import com.example.learnMongoRedis.domain.model.match.Season;
 import com.example.learnMongoRedis.global.wrapper.BaseResponseEntity;
 import lombok.RequiredArgsConstructor;
@@ -23,4 +24,8 @@ public class MatchController {
         return BaseResponseEntity.ok(seasonService.getAllSeason(), "success");
     }
 
+    @GetMapping("/recent")
+    public ResponseEntity<BaseResponseEntity<List<Match>>> getRecentFiftyMatch() {
+        return BaseResponseEntity.ok(seasonService.getMatchLastTwoSeason(), "success");
+    }
 }

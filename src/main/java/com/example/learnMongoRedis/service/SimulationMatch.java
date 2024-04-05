@@ -1,14 +1,11 @@
 package com.example.learnMongoRedis.service;
 
 import com.example.learnMongoRedis.domain.StateModel.MatchResultState;
-import com.example.learnMongoRedis.domain.model.PlayerOfMonthly;
 import com.example.learnMongoRedis.domain.StateModel.SimulationData;
 import com.example.learnMongoRedis.domain.StateModel.UpdateMatchOutcome;
-import com.example.learnMongoRedis.domain.model.Player;
-import com.example.learnMongoRedis.domain.model.SeasonInTeam;
-import com.example.learnMongoRedis.domain.model.PlayerInTeam;
+import com.example.learnMongoRedis.domain.model.*;
+import com.example.learnMongoRedis.domain.model.match.Round;
 import com.example.learnMongoRedis.domain.model.match.*;
-import com.example.learnMongoRedis.domain.model.Team;
 import com.example.learnMongoRedis.global.error_handler.AppError;
 import com.example.learnMongoRedis.repository.PlayerRepository;
 import com.example.learnMongoRedis.repository.SeasonRepository;
@@ -58,8 +55,7 @@ public class SimulationMatch {
         return new SimulationData(teams, season);
     }
 
-
-    @Scheduled(fixedRate = 50000)
+    @Scheduled(fixedRate = 5000)
     public void runSimulation() {
         SimulationData simulationData = fetchSimulationData();
         Random random = new Random();
@@ -72,15 +68,15 @@ public class SimulationMatch {
         int roundCount = season.getRoundCount();
 
         // 홈 팀, 어웨이 팀
-        double[] Advantage = {0.9,1.1};
+        double[] Advantage = {0.9, 1.1};
         //팀 정보에서 선수들 오버롤 들을 더해서 평균값 내기(팀 오버롤)
 
         for (int match = 0; match < matchesPerRound; match++) {
 
-            int[] shots = {0,0};
-            int[] effectiveShots = {0,0};
-            int[] goals = {0,0};
-            int[] connerKicks = {0,0};
+            int[] shots = {0, 0};
+            int[] effectiveShots = {0, 0};
+            int[] goals = {0, 0};
+            int[] connerKicks = {0, 0};
             ArrayList<Goal> homeGoals = new ArrayList<>();
             ArrayList<Goal> awayGoals = new ArrayList<>();
             // 매치 팀 인덱스 설정
@@ -103,22 +99,29 @@ public class SimulationMatch {
             Team awayTeam = teams.get(awayTeamIndex);
 
             List<PlayerInTeam> homeTeamPlayers = homeTeam.getPlayers();
-            Map<Integer,List<PlayerInTeam>> homePositionPlayers = chunkPlayersToPosition(homeTeamPlayers);
+            Map<Integer, List<PlayerInTeam>> homePositionPlayers = chunkPlayersToPosition(homeTeamPlayers);
 
             List<PlayerInTeam> awayTeamPlayers = awayTeam.getPlayers();
-            Map<Integer,List<PlayerInTeam>> awayPositionPlayers = chunkPlayersToPosition(awayTeamPlayers);
+            Map<Integer, List<PlayerInTeam>> awayPositionPlayers = chunkPlayersToPosition(awayTeamPlayers);
 
-            double overall []  = {homeTeam.teamOverallAvg(),awayTeam.teamOverallAvg()};
+            int[] overall = {homeTeam.teamOverallAvg(), awayTeam.teamOverallAvg()};
 
             // 팀 배분 여기서 끝
             // 여기서 90분 돌려서 가상의 결과 데이터 goalSimulation => Match
             // Match class 만든다
-
+            int home = 0;
+            int away = 0;
+            int totalRandomizations = overall[0] + overall[1];
             // 슛->골
-            for(int i=0;i<2;i++){ // 홈팀 어웨이팀 2번
-                double ratio = Advantage[i] * (-0.002*overall[i]+1.2);
+            for (int i = 0; i < 2; i++) { // 홈팀 어웨이팀 2번
+                double ratio = Advantage[i] * (-0.002 * overall[i] + 1.2);
                 for (int minute = 0; minute < 90; minute++) {
-                    if (random.nextDouble()<0.10) connerKicks[i]++;
+
+                    int randomInt = random.nextInt(totalRandomizations);
+                    if(overall[0] >= randomInt) home++;
+                    else away++;
+
+                    if (random.nextDouble() < 0.10) connerKicks[i]++;
                     if (random.nextDouble() * ratio < 0.20) { // 20% 확률로 슈팅
                         shots[i]++;
                         if (random.nextDouble() * ratio < 0.30) { // 슈팅 중 30%은 유효슈팅
@@ -129,7 +132,7 @@ public class SimulationMatch {
                                 if (scorer < 0.55) { // 55% 확률로 공격수가 골
                                     // 골 넣은 선수 및 어시스트 선수 선정하기
                                     // 골은 해당 포지션의 선수들 중 하나, 어시스트는 골 넣은 선수 제외한 나머지
-                                    if(i==0){ // 홈 팀
+                                    if (i == 0) { // 홈 팀
                                         int goalIndex = random.nextInt(homePositionPlayers.get(1).size());
                                         int assistIndex = random.nextInt(homePositionPlayers.get(1).size());
                                         List<PlayerInTeam> attackPlayers = homePositionPlayers.get(1);
@@ -142,7 +145,7 @@ public class SimulationMatch {
                                                 assistPlayer.get_id(),
                                                 assistPlayer.getName()
                                         ));
-                                    }else{ // 어웨이 팀
+                                    } else { // 어웨이 팀
                                         int goalIndex = random.nextInt(awayPositionPlayers.get(1).size());
                                         int assistIndex = random.nextInt(awayPositionPlayers.get(1).size());
                                         List<PlayerInTeam> attackPlayers = awayPositionPlayers.get(1);
@@ -160,7 +163,7 @@ public class SimulationMatch {
                                     // 골 넣은 선수 및 어시스트 선수 선정하기
                                     // 팀에 해당하는 선수(팀 아이디를 불러오기)
                                     // 골은 해당 포지션의 선수들 중 하나, 어시스트는 골 넣은 선수 제외한 나머지
-                                    if(i==0){ // 홈 팀
+                                    if (i == 0) { // 홈 팀
                                         int goalIndex = random.nextInt(homePositionPlayers.get(2).size());
                                         int assistIndex = random.nextInt(homePositionPlayers.get(2).size());
                                         List<PlayerInTeam> midPlayers = homePositionPlayers.get(2);
@@ -173,7 +176,7 @@ public class SimulationMatch {
                                                 assistPlayer.get_id(),
                                                 assistPlayer.getName()
                                         ));
-                                    }else{ // 어웨이 팀
+                                    } else { // 어웨이 팀
                                         int goalIndex = random.nextInt(awayPositionPlayers.get(2).size());
                                         int assistIndex = random.nextInt(awayPositionPlayers.get(2).size());
                                         List<PlayerInTeam> midPlayers = awayPositionPlayers.get(2);
@@ -190,7 +193,7 @@ public class SimulationMatch {
                                 } else {
                                     // 나머지 확률로 수비수가 골
                                     // 골은 해당 포지션의 선수들 중 하나, 어시스트는 골 넣은 선수 제외한 나머지
-                                    if(i==0){ // 홈 팀
+                                    if (i == 0) { // 홈 팀
                                         int goalIndex = random.nextInt(homePositionPlayers.get(3).size());
                                         int assistIndex = random.nextInt(homePositionPlayers.get(3).size());
                                         List<PlayerInTeam> defendPlayers = homePositionPlayers.get(3);
@@ -203,7 +206,7 @@ public class SimulationMatch {
                                                 assistPlayer.get_id(),
                                                 assistPlayer.getName()
                                         ));
-                                    }else{ // 어웨이 팀
+                                    } else { // 어웨이 팀
                                         int goalIndex = random.nextInt(awayPositionPlayers.get(3).size());
                                         int assistIndex = random.nextInt(awayPositionPlayers.get(3).size());
                                         List<PlayerInTeam> defendPlayers = awayPositionPlayers.get(3);
@@ -223,19 +226,28 @@ public class SimulationMatch {
                     }
                 }
             }
+
+            double totalPercentage = home + away;
+            if (totalPercentage > 100) {
+                double ratio = 100 / totalPercentage;
+                home = (int) Math.ceil((home * ratio));
+                away = (int) (away * ratio);
+            }
             // 아래가 가짜 데이터 이거를 진짜로 바꿔야 함(0->home, 1->away)
             TeamStat homeStat = new TeamStat(
                     homeTeam.getId(),
                     homeTeam.getClubName(),
                     homeGoals,
-                    shots[0],effectiveShots[0],connerKicks[0]
-                    );
+                    shots[0], effectiveShots[0], connerKicks[0],
+                    home
+            );
             TeamStat awayStat = new TeamStat(
                     awayTeam.getId(),
                     awayTeam.getClubName(),
                     awayGoals,
-                    shots[1],effectiveShots[1],connerKicks[1]
-                    );
+                    shots[1], effectiveShots[1], connerKicks[1],
+                    away
+            );
 
             matches.add(createMatch(
                     homeStat,
@@ -245,21 +257,22 @@ public class SimulationMatch {
         }
 
         Round round = createRound(roundCount + 1, matches);
-         saveSimulationResults(season, round, teams);
+        saveSimulationResults(season, round, teams);
     }
 
     @Transactional
     public void saveSimulationResults(Season season, Round round, List<Team> teams) {
         addRoundInSeason(season.getId(), round);
-        updateSeasonInTeam(teams, round, season.getSeason());;
+        updateSeasonInTeam(teams, round, season.getSeason());
+        ;
         if ((round.getRound()) % 4 == 0) saveTopPlayersMonthlyScore();
         if ((round.getRound()) % 30 == 0) resetSeasonsStats();
     }
 
-    private Map<Integer,List<PlayerInTeam>> chunkPlayersToPosition(List<PlayerInTeam> players) {
-        Map<Integer,List<PlayerInTeam>> divisionToPosition = new HashMap<>();
+    private Map<Integer, List<PlayerInTeam>> chunkPlayersToPosition(List<PlayerInTeam> players) {
+        Map<Integer, List<PlayerInTeam>> divisionToPosition = new HashMap<>();
 
-        for(int i=0;i<players.size();i++){
+        for (int i = 0; i < players.size(); i++) {
             switch (players.get(i).getPosition()) {
                 case 1 -> {
                     divisionToPosition.computeIfAbsent(1, k -> new ArrayList<PlayerInTeam>());

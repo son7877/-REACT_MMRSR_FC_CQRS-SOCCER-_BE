@@ -15,4 +15,5 @@ public class TeamStat{
     public int shots;
     public int effectiveShots;
     public int connerKicks;
+    public int possession;
 }

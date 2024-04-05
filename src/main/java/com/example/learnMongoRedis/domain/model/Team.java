@@ -23,7 +23,7 @@ public class Team {
     private int leaguePoint;
     private int teamOverall;
 
-    public double teamOverallAvg(){
+    public int teamOverallAvg(){
         return teamOverall / 11;
     }
 

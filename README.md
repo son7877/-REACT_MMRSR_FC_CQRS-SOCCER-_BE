@@ -45,13 +45,12 @@
 - **Redis** - 캐싱 및 토큰 관리
 
 ### Security & Authentication
-- **JWT (JSON Web Token)** - 무상태 인증
+- **JWT (JSON Web Token)** 
 - **BCrypt** - 비밀번호 해싱
-- **JJWT 0.11.5** - JWT 라이브러리
 
 ### Build Tool
-- **Gradle** - 빌드 자동화
-- **Java 17** - 프로그래밍 언어
+- **Gradle** - 
+- **Java 17** - 
 
 ## ⚙️ 시뮬레이션 로직
 

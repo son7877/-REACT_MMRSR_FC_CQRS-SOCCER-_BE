@@ -7,7 +7,6 @@ import com.example.learnMongoRedis.domain.model.*;
 import com.example.learnMongoRedis.domain.model.match.Round;
 import com.example.learnMongoRedis.domain.model.match.*;
 import com.example.learnMongoRedis.global.error_handler.AppError;
-import com.example.learnMongoRedis.repository.PlayerRepository;
 import com.example.learnMongoRedis.repository.SeasonRepository;
 import com.example.learnMongoRedis.repository.TeamRepository;
 import lombok.extern.log4j.Log4j2;
@@ -15,11 +14,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.aggregation.Aggregation;
-import org.springframework.data.mongodb.core.aggregation.AggregationResults;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,18 +29,30 @@ import java.util.stream.Stream;
 @Log4j2
 public class SimulationMatch {
 
+    // 시뮬레이션 스탯 확률 상수
+    private static final double HOME_ADVANTAGE = 0.9;
+    private static final double AWAY_ADVANTAGE = 1.1;
+    private static final double CORNER_KICK_PROBABILITY = 0.10;
+    private static final double SHOOTING_PROBABILITY = 0.20;
+    private static final double EFFECTIVE_SHOT_PROBABILITY = 0.30;
+    private static final double GOAL_PROBABILITY = 0.40;
+    private static final double STRIKER_GOAL_PROBABILITY = 0.55;
+    private static final double MIDFIELDER_GOAL_PROBABILITY = 0.90;
+    private static final int MATCH_DURATION_MINUTES = 90;
+    private static final int MAX_POSSESSION_PERCENTAGE = 100;
+
+    // 포지션 상수
+    private static final int POSITION_STRIKER = 1;
+    private static final int POSITION_MIDFIELDER = 2;
+    private static final int POSITION_DEFENDER = 3;
+
     private final TeamRepository teamRepository;
-    private final PlayerRepository playerRepository;
     private final SeasonRepository seasonRepository;
-    @Autowired
     private final MongoTemplate mongoTemplate;
-    @Autowired
-    private StringRedisTemplate stringRedisTemplate;
 
     @Autowired
-    public SimulationMatch(TeamRepository teamRepository, PlayerRepository playerRepository, SeasonRepository seasonRepository, MongoTemplate mongoTemplate) {
+    public SimulationMatch(TeamRepository teamRepository, SeasonRepository seasonRepository, MongoTemplate mongoTemplate) {
         this.teamRepository = teamRepository;
-        this.playerRepository = playerRepository;
         this.seasonRepository = seasonRepository;
         this.mongoTemplate = mongoTemplate;
     }
@@ -58,243 +67,227 @@ public class SimulationMatch {
     @Scheduled(fixedRate = 5000)
     public void runSimulation() {
         SimulationData simulationData = fetchSimulationData();
-        Random random = new Random();
-        List<Match> matches = new ArrayList<>();
         List<Team> teams = simulationData.getTeams();
         Season season = simulationData.getSeason();
 
-        int totalTeams = teams.size();  // 총 팀수
-        int matchesPerRound = totalTeams / 2; // 라운드 당 경기 수
+        List<Match> matches = simulateRoundMatches(teams, season);
+        Round round = createRound(season.getRoundCount() + 1, matches);
+        saveSimulationResults(season, round, teams);
+    }
+
+    /**
+     * 라운드의 모든 경기를 시뮬레이션
+     */
+    private List<Match> simulateRoundMatches(List<Team> teams, Season season) {
+        List<Match> matches = new ArrayList<>();
+        int totalTeams = teams.size();
+        int matchesPerRound = totalTeams / 2;
         int roundCount = season.getRoundCount();
 
-        // 홈 팀, 어웨이 팀
-        double[] Advantage = {0.9, 1.1};
-        //팀 정보에서 선수들 오버롤 들을 더해서 평균값 내기(팀 오버롤)
+        for (int matchIndex = 0; matchIndex < matchesPerRound; matchIndex++) {
+            TeamPair teamPair = determineMatchTeams(teams, totalTeams, roundCount, matchIndex);
+            Match match = simulateSingleMatch(teamPair.home, teamPair.away);
+            matches.add(match);
+        }
 
-        for (int match = 0; match < matchesPerRound; match++) {
+        return matches;
+    }
 
-            int[] shots = {0, 0};
-            int[] effectiveShots = {0, 0};
-            int[] goals = {0, 0};
-            int[] connerKicks = {0, 0};
-            ArrayList<Goal> homeGoals = new ArrayList<>();
-            ArrayList<Goal> awayGoals = new ArrayList<>();
-            // 매치 팀 인덱스 설정
-            int homeTeamIndex = (roundCount % (totalTeams - 1) + match) % (totalTeams - 1);
-            int awayTeamIndex = ((totalTeams - 1) - match + roundCount % (totalTeams - 1)) % (totalTeams - 1);
+    /**
+     * 라운드 로빈 방식으로 매치할 팀을 결정
+     */
+    private TeamPair determineMatchTeams(List<Team> teams, int totalTeams, int roundCount, int matchIndex) {
+        int homeTeamIndex = (roundCount % (totalTeams - 1) + matchIndex) % (totalTeams - 1);
+        int awayTeamIndex = ((totalTeams - 1) - matchIndex + roundCount % (totalTeams - 1)) % (totalTeams - 1);
 
-            // 한 팀(맨 끝 인덱스인 팀 고정)
-            if (match == 0) {
-                awayTeamIndex = totalTeams - 1;
+        // 한 팀은 고정
+        if (matchIndex == 0) {
+            awayTeamIndex = totalTeams - 1;
+        }
+
+        // 후반 라운드에서는 홈/어웨이 전환
+        if (roundCount >= totalTeams - 1) {
+            int temp = homeTeamIndex;
+            homeTeamIndex = awayTeamIndex;
+            awayTeamIndex = temp;
+        }
+
+        return new TeamPair(teams.get(homeTeamIndex), teams.get(awayTeamIndex));
+    }
+
+    /**
+     * 단일 경기를 시뮬레이션
+     */
+    private Match simulateSingleMatch(Team homeTeam, Team awayTeam) {
+        Map<Integer, List<PlayerInTeam>> homePositionPlayers = chunkPlayersToPosition(homeTeam.getPlayers());
+        Map<Integer, List<PlayerInTeam>> awayPositionPlayers = chunkPlayersToPosition(awayTeam.getPlayers());
+
+        MatchStats homeStats = simulateTeamPerformance(homeTeam, homePositionPlayers, HOME_ADVANTAGE);
+        MatchStats awayStats = simulateTeamPerformance(awayTeam, awayPositionPlayers, AWAY_ADVANTAGE);
+
+        int[] possessions = calculatePossessions(homeTeam.teamOverallAvg(), awayTeam.teamOverallAvg());
+
+        TeamStat homeStat = createTeamStat(homeTeam, homeStats, possessions[0]);
+        TeamStat awayStat = createTeamStat(awayTeam, awayStats, possessions[1]);
+
+        return createMatch(homeStat, awayStat, homeTeam.getHomeStadium());
+    }
+
+    /**
+     * 팀의 경기 통계를 시뮬레이션
+     */
+    private MatchStats simulateTeamPerformance(Team team, Map<Integer, List<PlayerInTeam>> positionPlayers, double advantage) {
+        Random random = new Random();
+        MatchStats stats = new MatchStats();
+        int overall = team.teamOverallAvg();
+        double ratio = advantage * (-0.002 * overall + 1.2); // 팀 오버롤에 따른 보정 비율
+
+        for (int minute = 0; minute < MATCH_DURATION_MINUTES; minute++) {
+            // 코너킥 시뮬레이션
+            if (random.nextDouble() < CORNER_KICK_PROBABILITY) {
+                stats.cornerKicks++;
             }
 
-            // 절반 라운드가 진행되면 1라운드의 홈,어웨이만 바꿔서 같은 방식으로 진행
-            if (roundCount >= totalTeams - 1) {
-                int temp = homeTeamIndex;
-                homeTeamIndex = awayTeamIndex;
-                awayTeamIndex = temp;
-            }
+            // 슈팅 시뮬레이션
+            if (random.nextDouble() * ratio < SHOOTING_PROBABILITY) {
+                stats.shots++;
 
-            Team homeTeam = teams.get(homeTeamIndex);
-            Team awayTeam = teams.get(awayTeamIndex);
+                // 유효 슈팅 시뮬레이션
+                if (random.nextDouble() * ratio < EFFECTIVE_SHOT_PROBABILITY) {
+                    stats.effectiveShots++;
 
-            List<PlayerInTeam> homeTeamPlayers = homeTeam.getPlayers();
-            Map<Integer, List<PlayerInTeam>> homePositionPlayers = chunkPlayersToPosition(homeTeamPlayers);
-
-            List<PlayerInTeam> awayTeamPlayers = awayTeam.getPlayers();
-            Map<Integer, List<PlayerInTeam>> awayPositionPlayers = chunkPlayersToPosition(awayTeamPlayers);
-
-            int[] overall = {homeTeam.teamOverallAvg(), awayTeam.teamOverallAvg()};
-
-            // 팀 배분 여기서 끝
-            // 여기서 90분 돌려서 가상의 결과 데이터 goalSimulation => Match
-            // Match class 만든다
-            int home = 0;
-            int away = 0;
-            int totalRandomizations = overall[0] + overall[1];
-            // 슛->골
-            for (int i = 0; i < 2; i++) { // 홈팀 어웨이팀 2번
-                double ratio = Advantage[i] * (-0.002 * overall[i] + 1.2);
-                for (int minute = 0; minute < 90; minute++) {
-
-                    int randomInt = random.nextInt(totalRandomizations);
-                    if(overall[0] >= randomInt) home++;
-                    else away++;
-
-                    if (random.nextDouble() < 0.10) connerKicks[i]++;
-                    if (random.nextDouble() * ratio < 0.20) { // 20% 확률로 슈팅
-                        shots[i]++;
-                        if (random.nextDouble() * ratio < 0.30) { // 슈팅 중 30%은 유효슈팅
-                            effectiveShots[i]++;
-                            if (random.nextDouble() * ratio < 0.40) { // 유효슈팅 중 40%은 골
-                                goals[i]++;
-                                double scorer = random.nextDouble();
-                                if (scorer < 0.55) { // 55% 확률로 공격수가 골
-                                    // 골 넣은 선수 및 어시스트 선수 선정하기
-                                    // 골은 해당 포지션의 선수들 중 하나, 어시스트는 골 넣은 선수 제외한 나머지
-                                    if (i == 0) { // 홈 팀
-                                        int goalIndex = random.nextInt(homePositionPlayers.get(1).size());
-                                        int assistIndex = random.nextInt(homePositionPlayers.get(1).size());
-                                        List<PlayerInTeam> attackPlayers = homePositionPlayers.get(1);
-                                        PlayerInTeam goalPlayer = attackPlayers.get(goalIndex);
-                                        PlayerInTeam assistPlayer = attackPlayers.get(assistIndex);
-                                        homeGoals.add(new Goal(
-                                                minute,
-                                                goalPlayer.get_id(),
-                                                goalPlayer.getName(),
-                                                assistPlayer.get_id(),
-                                                assistPlayer.getName()
-                                        ));
-                                    } else { // 어웨이 팀
-                                        int goalIndex = random.nextInt(awayPositionPlayers.get(1).size());
-                                        int assistIndex = random.nextInt(awayPositionPlayers.get(1).size());
-                                        List<PlayerInTeam> attackPlayers = awayPositionPlayers.get(1);
-                                        PlayerInTeam goalPlayer = attackPlayers.get(goalIndex);
-                                        PlayerInTeam assistPlayer = attackPlayers.get(assistIndex);
-                                        awayGoals.add(new Goal(
-                                                minute,
-                                                goalPlayer.get_id(),
-                                                goalPlayer.getName(),
-                                                assistPlayer.get_id(),
-                                                assistPlayer.getName()
-                                        ));
-                                    }
-                                } else if (scorer < 0.90) { // 추가 35% 확률로 미드필더가 골
-                                    // 골 넣은 선수 및 어시스트 선수 선정하기
-                                    // 팀에 해당하는 선수(팀 아이디를 불러오기)
-                                    // 골은 해당 포지션의 선수들 중 하나, 어시스트는 골 넣은 선수 제외한 나머지
-                                    if (i == 0) { // 홈 팀
-                                        int goalIndex = random.nextInt(homePositionPlayers.get(2).size());
-                                        int assistIndex = random.nextInt(homePositionPlayers.get(2).size());
-                                        List<PlayerInTeam> midPlayers = homePositionPlayers.get(2);
-                                        PlayerInTeam goalPlayer = midPlayers.get(goalIndex);
-                                        PlayerInTeam assistPlayer = midPlayers.get(assistIndex);
-                                        homeGoals.add(new Goal(
-                                                minute,
-                                                goalPlayer.get_id(),
-                                                goalPlayer.getName(),
-                                                assistPlayer.get_id(),
-                                                assistPlayer.getName()
-                                        ));
-                                    } else { // 어웨이 팀
-                                        int goalIndex = random.nextInt(awayPositionPlayers.get(2).size());
-                                        int assistIndex = random.nextInt(awayPositionPlayers.get(2).size());
-                                        List<PlayerInTeam> midPlayers = awayPositionPlayers.get(2);
-                                        PlayerInTeam goalPlayer = midPlayers.get(goalIndex);
-                                        PlayerInTeam assistPlayer = midPlayers.get(assistIndex);
-                                        awayGoals.add(new Goal(
-                                                minute,
-                                                goalPlayer.get_id(),
-                                                goalPlayer.getName(),
-                                                assistPlayer.get_id(),
-                                                assistPlayer.getName()
-                                        ));
-                                    }
-                                } else {
-                                    // 나머지 확률로 수비수가 골
-                                    // 골은 해당 포지션의 선수들 중 하나, 어시스트는 골 넣은 선수 제외한 나머지
-                                    if (i == 0) { // 홈 팀
-                                        int goalIndex = random.nextInt(homePositionPlayers.get(3).size());
-                                        int assistIndex = random.nextInt(homePositionPlayers.get(3).size());
-                                        List<PlayerInTeam> defendPlayers = homePositionPlayers.get(3);
-                                        PlayerInTeam goalPlayer = defendPlayers.get(goalIndex);
-                                        PlayerInTeam assistPlayer = defendPlayers.get(assistIndex);
-                                        homeGoals.add(new Goal(
-                                                minute,
-                                                goalPlayer.get_id(),
-                                                goalPlayer.getName(),
-                                                assistPlayer.get_id(),
-                                                assistPlayer.getName()
-                                        ));
-                                    } else { // 어웨이 팀
-                                        int goalIndex = random.nextInt(awayPositionPlayers.get(3).size());
-                                        int assistIndex = random.nextInt(awayPositionPlayers.get(3).size());
-                                        List<PlayerInTeam> defendPlayers = awayPositionPlayers.get(3);
-                                        PlayerInTeam goalPlayer = defendPlayers.get(goalIndex);
-                                        PlayerInTeam assistPlayer = defendPlayers.get(assistIndex);
-                                        awayGoals.add(new Goal(
-                                                minute,
-                                                goalPlayer.get_id(),
-                                                goalPlayer.getName(),
-                                                assistPlayer.get_id(),
-                                                assistPlayer.getName()
-                                        ));
-                                    }
-                                }
-                            }
-                        }
+                    // 골 시뮬레이션
+                    if (random.nextDouble() * ratio < GOAL_PROBABILITY) {
+                        Goal goal = generateGoal(random, positionPlayers, minute);
+                        stats.goals.add(goal);
                     }
                 }
             }
-
-            double totalPercentage = home + away;
-            if (totalPercentage > 100) {
-                double ratio = 100 / totalPercentage;
-                home = (int) Math.ceil((home * ratio));
-                away = (int) (away * ratio);
-            }
-            // 아래가 가짜 데이터 이거를 진짜로 바꿔야 함(0->home, 1->away)
-            TeamStat homeStat = new TeamStat(
-                    homeTeam.getId(),
-                    homeTeam.getClubName(),
-                    homeGoals,
-                    shots[0], effectiveShots[0], connerKicks[0],
-                    home
-            );
-            TeamStat awayStat = new TeamStat(
-                    awayTeam.getId(),
-                    awayTeam.getClubName(),
-                    awayGoals,
-                    shots[1], effectiveShots[1], connerKicks[1],
-                    away
-            );
-
-            matches.add(createMatch(
-                    homeStat,
-                    awayStat,
-                    homeTeam.getHomeStadium()
-            ));
         }
 
-        Round round = createRound(roundCount + 1, matches);
-        saveSimulationResults(season, round, teams);
+        return stats;
     }
+
+    /**
+     * 골을 생성
+     */
+    private Goal generateGoal(Random random, Map<Integer, List<PlayerInTeam>> positionPlayers, int minute) {
+        double scorer = random.nextDouble();
+
+        if (scorer < STRIKER_GOAL_PROBABILITY) {
+            return createGoalFromPosition(random, positionPlayers.get(POSITION_STRIKER), minute);
+        } else if (scorer < MIDFIELDER_GOAL_PROBABILITY) {
+            return createGoalFromPosition(random, positionPlayers.get(POSITION_MIDFIELDER), minute);
+        } else {
+            return createGoalFromPosition(random, positionPlayers.get(POSITION_DEFENDER), minute);
+        }
+    }
+
+    /**
+     * 특정 포지션의 선수로부터 골을 생성
+     */
+    private Goal createGoalFromPosition(Random random, List<PlayerInTeam> players, int minute) {
+        if (players == null || players.isEmpty()) {
+            throw new AppError.Unexpected.NullPointerException("해당 포지션에 선수가 없습니다.");
+        }
+
+        int goalIndex = random.nextInt(players.size());
+        int assistIndex = random.nextInt(players.size());
+
+        PlayerInTeam goalPlayer = players.get(goalIndex);
+        PlayerInTeam assistPlayer = players.get(assistIndex);
+
+        return new Goal(
+            minute,
+            goalPlayer.get_id(),
+            goalPlayer.getName(),
+            assistPlayer.get_id(),
+            assistPlayer.getName()
+        );
+    }
+
+    /**
+     * 팀 오버롤을 기반으로 점유율을 계산
+     */
+    private int[] calculatePossessions(int homeOverall, int awayOverall) {
+        Random random = new Random();
+        int home = 0;
+        int away = 0;
+        int totalRandomizations = homeOverall + awayOverall;
+
+        for (int i = 0; i < MATCH_DURATION_MINUTES; i++) {
+            int randomInt = random.nextInt(totalRandomizations);
+            if (homeOverall >= randomInt) {
+                home++;
+            } else {
+                away++;
+            }
+        }
+
+        double totalPercentage = home + away;
+        if (totalPercentage > MAX_POSSESSION_PERCENTAGE) {
+            double ratio = MAX_POSSESSION_PERCENTAGE / totalPercentage;
+            home = (int) Math.ceil(home * ratio);
+            away = (int) (away * ratio);
+        }
+
+        return new int[]{home, away};
+    }
+
+    /**
+     * TeamStat 객체를 생성
+     */
+    private TeamStat createTeamStat(Team team, MatchStats stats, int possession) {
+        return new TeamStat(
+            team.getId(),
+            team.getClubName(),
+            stats.goals,
+            stats.shots,
+            stats.effectiveShots,
+            stats.cornerKicks,
+            possession
+        );
+    }
+
+    /**
+     * 경기 통계를 담는 내부 클래스
+     */
+    private static class MatchStats {
+        int shots = 0;
+        int effectiveShots = 0;
+        int cornerKicks = 0;
+        List<Goal> goals = new ArrayList<>();
+    }
+
+    /**
+     * 홈팀과 어웨이팀 쌍을 담는 record
+     */
+    private record TeamPair(Team home, Team away) {}
 
     @Transactional
     public void saveSimulationResults(Season season, Round round, List<Team> teams) {
         addRoundInSeason(season.getId(), round);
         updateSeasonInTeam(teams, round, season.getSeason());
-        ;
         if ((round.getRound()) % 4 == 0) saveTopPlayersMonthlyScore();
         if ((round.getRound()) % 30 == 0) resetSeasonsStats();
     }
 
+    /**
+     * 포지션별로 선수들을 분류
+     */
     private Map<Integer, List<PlayerInTeam>> chunkPlayersToPosition(List<PlayerInTeam> players) {
         Map<Integer, List<PlayerInTeam>> divisionToPosition = new HashMap<>();
 
-        for (int i = 0; i < players.size(); i++) {
-            switch (players.get(i).getPosition()) {
-                case 1 -> {
-                    divisionToPosition.computeIfAbsent(1, k -> new ArrayList<PlayerInTeam>());
-                    divisionToPosition.get(1).add(players.get(i));
-                }
-                case 2 -> {
-                    divisionToPosition.computeIfAbsent(2, k -> new ArrayList<PlayerInTeam>());
-                    divisionToPosition.get(2).add(players.get(i));
-                }
-                case 3 -> {
-                    divisionToPosition.computeIfAbsent(3, k -> new ArrayList<PlayerInTeam>());
-                    divisionToPosition.get(3).add(players.get(i));
-                }
-                default -> {
-                    divisionToPosition.computeIfAbsent(4, k -> new ArrayList<PlayerInTeam>());
-                    divisionToPosition.get(4).add(players.get(i));
-                }
-            }
+        for (PlayerInTeam player : players) {
+            divisionToPosition.computeIfAbsent(player.getPosition(), k -> new ArrayList<>()).add(player);
         }
+
         return divisionToPosition;
     }
 
+    /**
+     * 시즌에 라운드를 추가
+     */
     private void addRoundInSeason(String seasonId, Round round) {
         Query query = new Query(Criteria.where("id").is(seasonId));
         Update update = new Update().inc("roundCount", 1).push("roundList", round);
@@ -310,6 +303,9 @@ public class SimulationMatch {
         }
     }
 
+    /**
+     * 새로운 시즌 생성
+     */
     private Season createSeason(int seasonNumber) {
         Season season = Season.builder()
                 .season(seasonNumber)
@@ -321,6 +317,9 @@ public class SimulationMatch {
         return season;
     }
 
+    /**
+     * 단일 매치 객체 생성
+     */
     private Match createMatch(TeamStat home, TeamStat away, String stadium) {
         return new Match(
                 LocalDateTime.now().toString(),
@@ -330,6 +329,9 @@ public class SimulationMatch {
         );
     }
 
+    /**
+     * 단일 라운드 객체 생성
+     */
     private Round createRound(int round, List<Match> matches) {
         return Round.builder()
                 .round(round)
@@ -337,6 +339,9 @@ public class SimulationMatch {
                 .build();
     }
 
+    /**
+     * 팀의 시즌 기록 업데이트
+     */
     private void updateSeasonInTeam(List<Team> teamList, Round round, int season) {
         round.getMatches().forEach((match -> {
             TeamStat homeStat = match.homeTeam;
@@ -362,14 +367,15 @@ public class SimulationMatch {
                 awaySeasons.add(createSeasonInTeam(awayTeam.getId(), season));
             }
 
-
             updateMatchResultOutcome(homeTeam, homeSeasons.size() - 1, makeUpdateMatchOutcome(homeStat, awayStat, true));
             updateMatchResultOutcome(awayTeam, awaySeasons.size() - 1, makeUpdateMatchOutcome(homeStat, awayStat, false));
             updatePlayerStatsForMatch(homeStat, awayStat);
-
         }));
     }
 
+    /**
+     * 팀에 새로운 시즌 기록 생성 및 추가
+     */
     private SeasonInTeam createSeasonInTeam(String teamId, int season) {
         SeasonInTeam seasonInTeam = SeasonInTeam
                 .builder()
@@ -384,14 +390,19 @@ public class SimulationMatch {
         return seasonInTeam;
     }
 
+    /**
+     * 팀에 시즌 기록 추가
+     */
     public void addSeasonToTeam(String teamId, SeasonInTeam newSeason) {
         Query query = new Query(Criteria.where("id").is(teamId));
         Update update = new Update().push("seasons", newSeason);
         mongoTemplate.updateFirst(query, update, Team.class);
     }
 
+    /**
+     * 매치 결과를 기반으로 UpdateMatchOutcome 객체 생성
+     */
     public UpdateMatchOutcome makeUpdateMatchOutcome(TeamStat home, TeamStat away, boolean isHome) {
-
         int homeGoals = home.goals.size();
         int awayGoals = away.goals.size();
         if (isHome) {
@@ -401,6 +412,9 @@ public class SimulationMatch {
         }
     }
 
+    /**
+     * 팀의 시즌 기록 업데이트
+     */
     public void updateMatchResultOutcome(Team team, int seasonIdx, UpdateMatchOutcome updateMatchOutcome) {
         Query query = new Query(Criteria.where("_id").is(team.getId()));
         Update update = new Update();
@@ -408,7 +422,7 @@ public class SimulationMatch {
         update.inc(baseUpdatePath + "totalGoal", updateMatchOutcome.getGoal());
         update.inc(baseUpdatePath + "totalConceded", updateMatchOutcome.getConceded());
 
-        String fieldToUpdate = baseUpdatePath + "wins"; // Default to wins
+        String fieldToUpdate = baseUpdatePath + "wins";
         switch (updateMatchOutcome.getMatchResultState()) {
             case DRAW:
                 fieldToUpdate = baseUpdatePath + "draws";
@@ -424,15 +438,19 @@ public class SimulationMatch {
         mongoTemplate.updateFirst(query, update, Team.class);
     }
 
-    // 추가해야할 로직 이달의 선수 이달의 팀 선수 업데이트
+    /**
+     * 매치에서 발생한 골을 기반으로 선수 기록 업데이트
+     */
     private void updatePlayerStatsForMatch(TeamStat home, TeamStat away) {
         List<Goal> goals = Stream.concat(home.getGoals().stream(), away.getGoals().stream()).toList();
         goals.forEach(this::updatePlayerStatsForGoal);
     }
 
+    /**
+     * 단일 골에 대해 선수 기록 업데이트
+     */
     private void updatePlayerStatsForGoal(Goal goal) {
         if (goal.getGoalPlayerId() != null && !goal.getGoalPlayerId().isEmpty()) {
-            // 득점자의 통계 업데이트
             Query queryGoalPlayer = new Query(Criteria.where("id").is(goal.getGoalPlayerId()));
             Update updateGoalPlayer = new Update()
                     .inc("totalGoalsScored", 1)
@@ -442,7 +460,6 @@ public class SimulationMatch {
         }
 
         if (goal.getAssistPlayerId() != null && !goal.getAssistPlayerId().isEmpty()) {
-            // 어시스트 제공자의 통계 업데이트
             Query queryAssistPlayer = new Query(Criteria.where("id").is(goal.getAssistPlayerId()));
             Update updateAssistPlayer = new Update()
                     .inc("totalAssists", 1)
@@ -452,6 +469,9 @@ public class SimulationMatch {
         }
     }
 
+    /**
+     * 월간 최고 선수 점수를 계산하고 저장
+     */
     public void saveTopPlayersMonthlyScore() {
         Aggregation aggregation = Aggregation.newAggregation(
                 Aggregation.project("id", "name", "age", "monthlyGoal", "monthlyAssists", "totalGoalsScored", "totalAssists", "teamId", "overall")
@@ -461,20 +481,24 @@ public class SimulationMatch {
                 Aggregation.out("playerOfMonthly")
         );
 
-        // "players" 컬렉션에서 집계를 실행합니다.
-        AggregationResults<PlayerOfMonthly> results = mongoTemplate.aggregate(aggregation, "players", PlayerOfMonthly.class);
-        List<PlayerOfMonthly> resultList = results.getMappedResults(); // 집계된 결과를 받습니다.
-
+        mongoTemplate.aggregate(aggregation, "players", PlayerOfMonthly.class);
         resetMonthlyStats();
     }
 
+    /**
+     * 모든 선수의 월간 기록 초기화
+     */
     public void resetMonthlyStats() {
         Update update = new Update().set("monthlyGoal", 0).set("monthlyAssists", 0);
         mongoTemplate.updateMulti(new Query(), update, Player.class);
     }
 
+    /**
+     * 모든 선수의 시즌 기록 초기화
+     */
     public void resetSeasonsStats() {
         Update update = new Update().set("goal", 0).set("assist", 0);
         mongoTemplate.updateMulti(new Query(), update, Player.class);
     }
 }
+
